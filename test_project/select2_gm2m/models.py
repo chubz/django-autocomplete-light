@@ -5,13 +5,14 @@ from gm2m import GM2MField
 
 
 @python_2_unicode_compatible
-class TestModel(models.Model):
+class TModel(models.Model):
     name = models.CharField(max_length=200)
 
     test = GM2MField()
 
     for_inline = models.ForeignKey(
         'self',
+        models.CASCADE,
         null=True,
         blank=True,
         related_name='inline_test_models'

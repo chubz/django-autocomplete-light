@@ -7,7 +7,10 @@ from dal import forward
 
 from django import VERSION
 from django import forms
-from django.core.urlresolvers import reverse
+try:
+    from django.urls import reverse
+except ImportError:
+    from django.core.urlresolvers import reverse
 from django.utils import six
 from django.utils.safestring import mark_safe
 
@@ -46,6 +49,7 @@ class WidgetMixin(object):
         """Instanciate a widget with a URL and a list of fields to forward."""
         self.url = url
         self.forward = forward or []
+        self.placeholder = kwargs.get("attrs", {}).get("data-placeholder")
         super(WidgetMixin, self).__init__(*args, **kwargs)
 
     def build_attrs(self, *args, **kwargs):
@@ -102,7 +106,7 @@ class WidgetMixin(object):
         Should only render selected options, by setting self.choices before
         calling the parent method.
 
-        Also renders <script> tag with forward configuration.
+        Remove this code when dropping support for Django<1.10.
         """
         selected_choices_arg = 1 if VERSION < (1, 10) else 0
 
@@ -110,21 +114,45 @@ class WidgetMixin(object):
         selected_choices = [six.text_type(c) for c
                             in args[selected_choices_arg] if c]
 
+        all_choices = copy.copy(self.choices)
         if self.url:
-            all_choices = copy.copy(self.choices)
             self.filter_choices_to_render(selected_choices)
+        elif not self.allow_multiple_selected:
+            if self.placeholder:
+                self.choices.insert(0, (None, ""))
 
         html = super(WidgetMixin, self).render_options(*args)
 
-        if self.url:
-            self.choices = all_choices
+        self.choices = all_choices
 
         return html
 
-    def render(self, name, value, attrs=None):
-        """Calling Django render together with `render_forward_conf`."""
-        widget = super(WidgetMixin, self).render(name, value, attrs)
-        conf = self.render_forward_conf(attrs['id'])
+    def optgroups(self, name, value, attrs=None):
+        """
+        Exclude unselected self.choices before calling the parent method.
+
+        Used by Django>=1.10.
+        """
+        # Filter out None values, not needed for autocomplete
+        selected_choices = [six.text_type(c) for c in value if c]
+        all_choices = copy.copy(self.choices)
+        if self.url:
+            self.filter_choices_to_render(selected_choices)
+        elif not self.allow_multiple_selected:
+            if self.placeholder:
+                self.choices.insert(0, (None, ""))
+        result = super(WidgetMixin, self).optgroups(name, value, attrs)
+        self.choices = all_choices
+        return result
+
+    def render(self, name, value, attrs=None, renderer=None, **kwargs):
+        """Call Django render together with `render_forward_conf`."""
+        widget = super(WidgetMixin, self).render(name, value, attrs, **kwargs)
+        try:
+            field_id = attrs['id']
+        except (KeyError, TypeError):
+            field_id = name
+        conf = self.render_forward_conf(field_id)
         return mark_safe(widget + conf)
 
     def _get_url(self):

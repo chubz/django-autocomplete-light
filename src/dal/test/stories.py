@@ -1,4 +1,5 @@
 """User stories, functional tests for AutocompleteTestCase."""
+from __future__ import unicode_literals
 
 import time
 
@@ -7,6 +8,8 @@ from django.utils import six
 from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
+
+import tenacity
 
 
 class BaseStory(object):
@@ -26,8 +29,8 @@ class BaseStory(object):
         """If any kwarg is None, get it from case attributes."""
         self.case = case
         self.clear_selector = clear_selector or self.case.clear_selector
-        self.dropdown_selector = (dropdown_selector or
-                                  self.case.dropdown_selector)
+        self.dropdown_selector = (dropdown_selector
+                                  or self.case.dropdown_selector)
         self.field_name = field_name or self.case.field_name
         self.input_selector = input_selector or self.case.input_selector
         self.label_selector = label_selector or self.case.label_selector
@@ -45,27 +48,16 @@ class BaseStory(object):
         )
         self.in_popup = False
 
+    @tenacity.retry(stop=tenacity.stop_after_delay(3))
     def find_option(self, text):
         """Incremental sleep until option appeared."""
-        tries = 0
-        options = self.case.browser.find_by_css(
-            self.option_selector)
+        options = self.case.browser.find_by_css(self.option_selector)
 
-        while True:
-            for option in options:
-                try:
-                    if text in option.text:
-                        return option
-                except StaleElementReferenceException:
-                    break
+        for option in options:
+            if text in option.text:
+                return option
 
-            if tries > 20:
-                raise Exception('Option did not appear')
-
-            time.sleep(tries * 0.1)
-            tries += 1
-            options = self.case.browser.find_by_css(
-                self.option_selector)
+        raise Exception('Option %s not found' % text)
 
     def get_field_label_selector(self):
         """Return CSS selector for field option label."""
@@ -84,14 +76,16 @@ class BaseStory(object):
         )
 
         self.clean_label_from_remove_buton()
-        return six.text_type(label.text)
+        return self.clean_label(six.text_type(label.text))
 
+    def clean_label(self, label):
+        """Given an option text, return the actual label."""
+        return label
+
+    @tenacity.retry(stop=tenacity.stop_after_delay(3))
     def assert_label(self, text):
         """Assert that the autocomplete label matches text."""
-        self.case.assertEquals(
-            six.text_type(text),
-            six.text_type(self.get_label()),
-        )
+        assert six.text_type(text) == six.text_type(self.get_label())
 
     def get_value(self):
         """Return the autocomplete field value."""
@@ -100,12 +94,10 @@ class BaseStory(object):
 
         return field['value']
 
+    @tenacity.retry(stop=tenacity.stop_after_delay(3))
     def assert_value(self, value):
         """Assart that the actual field value matches value."""
-        self.case.assertEquals(
-            self.get_value(),
-            six.text_type(value)
-        )
+        assert self.get_value() == six.text_type(value)
 
     def assert_selection(self, value, label):
         """Assert value is selected and has the given label."""
@@ -119,8 +111,20 @@ class BaseStory(object):
         self.assert_label(label)
         self.assert_value(value)
 
+    @tenacity.retry(stop=tenacity.stop_after_delay(3))
+    def assert_suggestion_labels_are(self, expected):
+        """Retrying assert that suggestions match expected labels."""
+        assert sorted(expected) == sorted(self.get_suggestions_labels())
+
     def switch_to_popup(self):
-        """Switch to popup window."""
+        """Wait for and switch to popup window."""
+        tries = 10
+        while tries:
+            if len(self.case.browser.windows) == 2:
+                break
+            time.sleep(0.1)
+            tries -= 1
+
         self.case.browser.windows.current = self.case.browser.windows[1]
         self.in_popup = True
 
@@ -136,7 +140,27 @@ class BaseStory(object):
         if not self.in_popup:
             sel += '[name=_continue]'
 
-        self.case.click(sel)
+        el = self.case.browser.find_by_css(sel).first
+        el.click()
+
+        # Wait until the form was actually submited
+        tries = 100
+        while tries:
+            # Popup is gone
+            if len(self.case.browser.windows) == 1 and self.in_popup:
+                break
+
+            # Page changed
+            try:
+                el.visible
+            except:
+                break
+
+            tries -= 1
+            time.sleep(.05)
+
+        if not self.in_popup:
+            self.case.wait_script()
 
     def toggle_autocomplete(self):
         """Open the autocomplete dropdown."""
@@ -180,7 +204,9 @@ class SelectOption(BaseStory):
 
     def select_option(self, text):
         """Assert that selecting option "text" sets input's value."""
-        self.toggle_autocomplete()
+        dropdown = self.case.browser.find_by_css(self.dropdown_selector)
+        if not len(dropdown) or not dropdown.visible:
+            self.toggle_autocomplete()
 
         self.case.assert_visible(self.dropdown_selector)
         self.case.enter_text(self.input_selector, text)
@@ -197,14 +223,14 @@ class InlineSelectOption(SelectOption):
     def __init__(self, case, inline_number, inline_related_name=None,
                  **kwargs):
         """
-        Same as UserCanSelectOption, in inline inline_number.
+        Do the same as UserCanSelectOption, in inline inline_number.
 
         Where inline_related_name should be the related_name option for the
         foreign key used for the InlineModelAdmin.
         """
         self.inline_number = inline_number
-        self.inline_related_name = (inline_related_name or
-                                    case.inline_related_name)
+        self.inline_related_name = (inline_related_name
+                                    or case.inline_related_name)
 
         super(InlineSelectOption, self).__init__(case, **kwargs)
 
@@ -217,12 +243,27 @@ class InlineSelectOption(SelectOption):
         )
 
         # Ensure the inline is displayed else click to add it
-        num = len(self.case.browser.find_by_css(
-            '.dynamic-%s' % self.inline_related_name))
+        add = self.case.browser.find_link_by_partial_text('Add another').first
 
-        add = self.case.browser.find_link_by_partial_text('Add another')
+        num = len(
+            self.case.browser.find_by_css(
+                '.dynamic-%s' % self.inline_related_name
+            )
+        )
         while num < self.inline_number + 1:
             add.click()
+
+            # Did it work or wasn't the js loaded yet ?
+            try:
+                self.case.browser.find_by_css(
+                    self.field_selector.replace(
+                        str(self.inline_number),
+                        str(num),
+                    )
+                ).first  # as usual, rely on implicit wait
+            except:
+                continue
+
             num += 1
 
 
@@ -299,7 +340,10 @@ class MultipleMixin(object):
             self.get_field_labels_selector()
         )
 
-        return [six.text_type(label.text) for label in labels]
+        return [
+            self.clean_label(six.text_type(label.text))
+            for label in labels
+        ]
 
     def get_values(self):
         """Return the autocomplete field value."""
@@ -340,7 +384,7 @@ class MultipleMixin(object):
         self.assert_values(values)
 
     def assert_selection_persists(self, values, labels):
-        """Same as above, but also submits the form and check again."""
+        """Do the same as above, but also submits the form and check again."""
         self.assert_selection(values, labels)
         self.submit()
         self.assert_labels(labels)

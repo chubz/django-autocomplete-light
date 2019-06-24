@@ -6,6 +6,7 @@ from dal_contenttypes.fields import (
 )
 
 from django import forms
+from django.conf.urls import url
 from django.contrib.contenttypes.models import ContentType
 
 from queryset_sequence import QuerySetSequence
@@ -18,8 +19,16 @@ class QuerySetSequenceFieldMixin(object):
         """Return the QuerySet from the QuerySetSequence for a ctype."""
         content_type = ContentType.objects.get_for_id(content_type_id)
 
-        for queryset in self.queryset.query._querysets:
-            if queryset.model == content_type.model_class():
+        for queryset in self.queryset.get_querysets():
+            if queryset.model.__name__ == 'QuerySequenceModel':
+                # django-queryset-sequence 0.7 support dynamically created
+                # QuerySequenceModel which replaces the original model when it
+                # patches the queryset since 6394e19
+                model = queryset.model.__bases__[0]
+            else:
+                model = queryset.model
+
+            if model == content_type.model_class():
                 return queryset
 
     def raise_invalid_choice(self, params=None):
@@ -125,3 +134,40 @@ class QuerySetSequenceModelMultipleField(ContentTypeModelMultipleFieldMixin,
                 self.raise_invalid_choice(params={'value': val})
 
         return queryset
+
+
+class GenericForeignKeyModelField(QuerySetSequenceModelField):
+    """Field that generate automatically the view for compatible widgets."""
+
+    def __init__(
+        self, *args,
+        model_choice=None, widget=None, view=None, field_id=None, **kwargs
+    ):
+        """Initialize GenericForeignKeyModelField."""
+        self.field_id = field_id if field_id else id(self)
+        if model_choice:
+            self.model_choice = model_choice
+            models_queryset = [model[0].objects.all()
+                               for model in model_choice]
+            kwargs['queryset'] = QuerySetSequence(*models_queryset)
+
+        # check if they are classes
+        if isinstance(widget, type) and isinstance(view, type):
+            self.widget_obj = widget
+            self.view_obj = view
+        else:
+            raise AttributeError(
+                "Class object are required (not instantiated)")
+
+        super().__init__(*args, **kwargs)
+
+    def as_url(self, form):
+        """Return url."""
+        url_name = '{}_autocomp_{}'.format(form.__name__, self.field_id)
+
+        self.widget = self.widget_obj(url=url_name)
+
+        auto_view = type('Autoview{}{}'.format(form.__name__, self.field_id),
+                         (self.view_obj,), {})
+        return url(r'^{}_{}_autocomp$'.format(form.__name__, self.field_id),
+                   auto_view.as_view(queryset=self.queryset), name=url_name)

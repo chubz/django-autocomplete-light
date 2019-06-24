@@ -31,10 +31,11 @@ class BaseQuerySetSequenceView(BaseQuerySetView):
 
     def mixup_querysets(self, qs):
         """Return a queryset with different model types."""
-        if len(list(qs.query._querysets)):
-            limit = int(self.paginate_by / len(qs.query._querysets))
-            qs.query._querysets[0][:2]
-            qs = QuerySetSequence(*[q[:limit] for q in qs.query._querysets])
+        querysets = list(qs.get_querysets())
+        queryset_count = len(querysets)
+        if queryset_count:
+            limit = int(self.paginate_by / queryset_count)
+            qs = QuerySetSequence(*[q[:limit] for q in querysets])
         return qs
 
     def get_queryset(self):
@@ -50,3 +51,12 @@ class BaseQuerySetSequenceView(BaseQuerySetView):
         """Return ctypeid-objectid for result."""
         return '%s-%s' % (ContentType.objects.get_for_model(result).pk,
                           result.pk)
+
+    def get_model_name(self, model):
+        """Return the name of the model, fetch parent if model is a proxy."""
+        if model._meta.proxy:
+            try:
+                model = list(model._meta.parents.keys())[0]
+            except IndexError:
+                pass
+        return model._meta.verbose_name

@@ -1,3 +1,171 @@
+3.3.4 re-release without dirty source
+
+3.3.3 django < 2.0 support with dal_static contributed by @andybak
+
+3.3.2 django.contrib.admin fix static files by @coredumperror
+
+3.3.1
+
+  - Fixed a bug in the way jquery.init.js was being used by @coredumperror
+  - Set select2 container CSS class to :all: @hbielenia
+  - Added missing renderer parameter to render method for django 2.1 @monim67
+  - Fix ImportError with SELECT2_TRANSLATIONS in Django 1.x @hugorodgerbrown
+  - Forward argument should always be a tuple @jihoon796
+  - Fixed exception thrown from Select2QuerySEtView when paginate_by is set
+    @coredumperror
+
+3.3.0
+
+    - use admin statics
+    - #981: create option behaviour
+    - #995: automatically generated views for generic foreign key fields
+    - Getting placeholder and minimumInputLength from dal select
+    - #1017: Initial migrations and database
+    - Turkish translation
+    - Added support for forwarded fields to Select2GenericForeignKeyModelField
+
+3.3.0-rc6
+
+    #959
+
+3.3.0-rc5
+
+    #895: Self() and JavaScript() forward features
+
+3.3.0-rc4
+
+    #843: Forward logic refactored. Specifications for types of forwarded values.
+
+3.3.0-rc3
+
+    #957 remove reference to deleted script (rebase issue introduced in
+    3.3.0-rc1)
+
+3.3.0-rc2
+
+    Revert 5b37f8661, fixes tests.
+
+3.3.0-rc1
+
+This version supports Django 2.0 and Python 3.6, perhaps more but I have not
+tested, please submit compatibility patches for older versions if needed.
+Please test them with tox -e base-py36-django20-sqlite before pushing.
+
+To install 3.3.0-rc1, use `pip install django-autocomplete-light==3.3.0-rc1`.
+
+New features:
+
+    #953: Select2 update to 3.4.0.6-rc.1 by @jpic
+    #917: django-nested-admin support by @loicteixeira
+    #815: Simplify customization of autocomplete views by @EvaSDK
+    #746: Select2 Language and dynamic Media by @luzfcb
+    #883: Allow overwriting the results by @eayin2
+
+Bug fixes:
+
+    #874: Fix Django 1.11.3 error by @ikcam
+    #933: Python 3.6 and Django 2.0 support by @jpic
+    #930: QuerySetSequence querysets order is not preserved by @melvyn-sopacua
+    #909: Prevent initilization of other selects by @loicteixeira
+    #904: Fix KeyError when id is not in attrs by @dwheaton
+    #885: Prevent rendering of empty option on multi select by @johandc
+    #892: Enable different item label for selected item by @maximpetrov
+    #926: Atomic create_object by @jpic
+    #718: Remove temp hack for select2 by @FuzzAU
+    #860: dal: widgets: use the name if we don't have the id by @xrmx
+    #849: Don't create a new option if an iexact-matching one already exists by @liwenyip
+
+Also thanks to the many documentation contributors.
+
+    #874: Fix Django 1.11.3 error by @ikcam
+    #937: Update tutorial.rst to fix XSS in the example by @hangtwenty
+    #919: Better create new object example by @davideghz
+    #928: Add note about slim jqueries by @melvyn-sopacua
+
+Test notes:
+
+    I have not tested this release with other Python and Django versions,
+    and also tests don't pass on travis despite the effort. It's working
+    on all browsers here and i've chased many seleniumish race conditions
+    but it's not enough for travis.
+    So, there's no docker image available with python and selenium that
+    looks good i'm probably going to make one at some point but it's not
+    today's priority as far as I'm concerned.
+    So, tests are run locally which means manual action, but i've left the QA
+    checks on travis as mandatory because i've fixed so many PEP8 mistakes
+    during this release ...
+
+Congratulations for this release my friends, because a lot of great work has
+been contributed by the community since last release 4 months ago.
+
+3.2.10
+
+    #877: Return proper content type for json by @mpasternak
+    #819: Fixed JS autocomplete initializer by @apinsard
+    #871: Add many translations by @dima-kov
+    #879: Add classifiers in setup.py by @ad-m
+    #868: Fix selector used to allow clearing non-required fields.
+    #861: prefer pristine jQuery to the django one by @xrmx
+
+3.2.9
+
+    HEAD is now at a44a2ed Fixed JS autocomplete initializer (#819) (#820) by
+    @apinsard
+
+3.2.8
+
+    #823: Optgroup list support with Select2GroupListView by @jsurloppe
+    #841: Allow boolean "data-html" attribute for widget on python side by @gagarski
+    #839: Support for forwarding radio buttons properly by @gagarski
+    #839: Add checkbox handling in forwards by @marekjedrzejewski
+    #833: Add functional tests for rename_forward app by @gagarski
+
+3.2.7
+
+    Remove forward.js from Select2WidgetMixin.Media by @gagarski
+    #838: Use namespaced jQuery in `get_forwards` by @ryan-copperleaf
+    #836: Queryset sequence view to display actual model name by @jsoa
+    3.2.5 and 3.2.6 were removed from PyPi but are the same.
+
+3.2.4
+
+    #813: Return 400 on invalid input by @EvaSDK
+
+3.2.3 Two seriously good community contributed bugfixes
+
+    #799: Support serializing UUIDs and add tests for models with UUIDs as PKs
+          by @blag
+    #826: Prevent rendering of empty option on multi select
+          by @beruic
+
+3.2.2 Test fixes, Django 1.10 and 1.11
+
+3.2.1
+
+    #737: TaggitSelect2: insure there's a comma when there's only one tag, or
+          tag "Multi word" would end up as "Multi" and "word" by
+          @Ixxy-Open-Source
+    #743: Fix placeholder not working when URL is not given to autocomplete
+          widget (#743) by @thauk-copperleaf
+    #756: Forward Capabilities Outside Admin by @gagarski
+
+3.2.0
+
+    #745: Add list autocomplete by @dmosberger, @jpic and @thecardcheat
+    #754: dal_queryset_sequence documentation update by @chubz
+    #734: Move create_option functionality into it's own method @andybak
+    #741: Fix initial value not set when selected choices aren't strings
+          @thauk-copperleaf
+    #733: Advanced forward features @gagarski
+    #752: Add doc test to CI by @jpic
+    #730: Resolve SystemCheckError fields.E304 @thecardcheat
+    #721: Note about placement of DAL before grappelli by @chubz
+    #748: Update docs example about loading jquery outside the admin @jpic
+
+    Mid version number bumped as a tribute to the new major features that were
+    added, however, there is no know backward compatibility break from 3.1 to
+    3.2.
+
 3.1.8 #727 Add missing static files
 
 3.1.7

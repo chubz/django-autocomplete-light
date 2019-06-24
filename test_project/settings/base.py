@@ -1,7 +1,18 @@
 import os
+import sys
 import django
 
+# hack for pytest:
+sys.path.insert(0, os.path.join(
+    os.path.dirname(__file__), '..', '..'))
+
 DEBUG = os.environ.get('DEBUG', False)
+
+if 'DEBUG' not in os.environ:
+    for cmd in ('runserver', 'pytest', 'py.test'):
+        if cmd in sys.argv[0] or cmd in sys.argv[1]:
+            DEBUG=True
+            continue
 TEMPLATE_DEBUG = DEBUG
 LOG_LEVEL = os.environ.get('DJANGO_LOG_LEVEL', 'INFO')
 
@@ -57,16 +68,13 @@ INSTALLED_APPS = [
     'select2_generic_foreign_key',
     'select2_many_to_many',
     'select2_one_to_one',
-    'select2_generic_m2m',
-    'select2_taggit',
-    'select2_tagging',
     'select2_outside_admin',
+    'select2_nestedadmin',
     'secure_data',
     'linked_data',
     'rename_forward',
-
-    'gm2m',
-    'select2_gm2m',
+    'forward_different_fields',
+    'custom_select2',
 
     # unit test app
     'tests',
@@ -75,14 +83,27 @@ INSTALLED_APPS = [
     'dal',
     # Enable plugins
     'dal_select2',
+    'queryset_sequence',
     'dal_queryset_sequence',
+    'select2_taggit',
+    'taggit',
+    'nested_admin',
 
     # Project apps
     'django_extensions',
-    'genericm2m',
-    'tagging',
-    'taggit',
 ]
+
+
+if django.VERSION < (2, 0, 0):
+    # pending upstream support for dj 2.0
+    INSTALLED_APPS += [
+        'gm2m',
+        'select2_gm2m',
+        'genericm2m',
+        'select2_generic_m2m',
+        'select2_tagging',
+        'tagging',
+    ]
 
 INSTALLED_APPS = INSTALLED_APPS + ['django.contrib.admin']
 
@@ -92,11 +113,16 @@ ROOT_URLCONF = 'urls'
 WSGI_APPLICATION = 'wsgi.application'
 
 SECRET_KEY = '58$1jvc332=lyfk_m^jl6ody$7pbk18nm95==!r$7m5!2dp%l@'
-DEBUG = True
 ALLOWED_HOSTS = []
 
 MIDDLEWARE_CLASSES = [
     'django.middleware.security.SecurityMiddleware',
+]
+
+if not DEBUG:
+    MIDDLEWARE_CLASSES.append('whitenoise.middleware.WhiteNoiseMiddleware')
+
+MIDDLEWARE_CLASSES += [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -106,8 +132,31 @@ MIDDLEWARE_CLASSES = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+if DEBUG:
+    try:
+        import debug_toolbar
+    except ImportError:
+        pass
+    else:
+        INSTALLED_APPS.append('debug_toolbar')
+        MIDDLEWARE_CLASSES.append('debug_toolbar.middleware.DebugToolbarMiddleware')
+        MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
+
 AUTH_PASSWORD_VALIDATORS = []
 DJANGO_LIVE_TEST_SERVER_ADDRESS="localhost:8000-8010,8080,9200-9300"
+
+if not DEBUG:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
@@ -126,6 +175,11 @@ from socket import gethostname
 ALLOWED_HOSTS = [
     gethostname(),
 ]
+
+if DEBUG:
+    ALLOWED_HOSTS = ['*']
+else:
+    ALLOWED_HOSTS.append('dal-yourlabs.rhcloud.com')
 
 STATIC_URL = '/public/static/'
 STATIC_ROOT = os.path.join(PROJECT_ROOT, 'public', 'static')
@@ -158,5 +212,4 @@ TEMPLATES = [
 
 SELENIUM_PAGE_LOAD_TIMEOUT = 100
 SELENIUM_TIMEOUT = 100
-
-
+INTERNAL_IPS = ('127.0.0.1',)

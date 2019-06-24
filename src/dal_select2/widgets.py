@@ -1,5 +1,7 @@
 """Select2 widget implementation module."""
 
+from functools import lru_cache
+
 from dal.widgets import (
     QuerySetSelectMixin,
     Select,
@@ -8,27 +10,83 @@ from dal.widgets import (
 )
 
 from django import forms
+from django.conf import settings
+try:
+    # SELECT2_TRANSLATIONS is Django 2.x only
+    from django.contrib.admin.widgets import SELECT2_TRANSLATIONS
+except ImportError:
+    SELECT2_TRANSLATIONS = {}
+from django.contrib.staticfiles import finders
 from django.utils import six
+from django.utils import translation
+from django.utils.itercompat import is_iterable
+
+
+@lru_cache()
+def get_i18n_name(lang_code):
+    """Ensure lang_code is supported by Select2."""
+    lower_lang = lang_code.lower()
+    split_lang = lang_code.split('-')[0]
+    # Use the SELECT2_TRANSLATIONS if available
+    if SELECT2_TRANSLATIONS:
+        if lower_lang in SELECT2_TRANSLATIONS:
+            return SELECT2_TRANSLATIONS.get(lower_lang)
+        elif split_lang in SELECT2_TRANSLATIONS:
+            return SELECT2_TRANSLATIONS.get(split_lang)
+    # Otherwise fallback to manually checking if the static file exists
+    if finders.find('admin/js/vendor/select2/i18n/%s.js' % lang_code):
+        return lang_code
+    elif finders.find('admin/js/vendor/select2/i18n/%s.js' % split_lang):
+        return lang_code.split('-')[0]
 
 
 class Select2WidgetMixin(object):
     """Mixin for Select2 widgets."""
 
-    class Media:
-        """Automatically include static files for the admin."""
+    def build_attrs(self, *args, **kwargs):
+        """Set data-autocomplete-light-language."""
+        attrs = super(Select2WidgetMixin, self).build_attrs(*args, **kwargs)
+        lang_code = self._get_language_code()
+        if lang_code:
+            attrs.setdefault('data-autocomplete-light-language', lang_code)
+        return attrs
 
-        css = {
-            'all': (
-                'autocomplete_light/vendor/select2/dist/css/select2.css',
-                'autocomplete_light/select2.css',
+    def _get_language_code(self):
+        """Return language code or None."""
+        lang_code = translation.get_language()
+        if lang_code:
+            lang_code = get_i18n_name(
+                translation.to_locale(lang_code).replace('_', '-')
             )
-        }
-        js = (
-            'autocomplete_light/jquery.init.js',
-            'autocomplete_light/autocomplete.init.js',
-            'autocomplete_light/vendor/select2/dist/js/select2.full.js',
-            'autocomplete_light/forward.js',
-            'autocomplete_light/select2.js',
+        return lang_code
+
+    @property
+    def media(self):
+        """Return JS/CSS resources for the widget."""
+        extra = '' if settings.DEBUG else '.min'
+        i18n_name = self._get_language_code()
+        i18n_file = (
+            'admin/js/vendor/select2/i18n/%s.js' % i18n_name,
+        ) if i18n_name else ()
+
+        return forms.Media(
+            js=(
+                'admin/js/vendor/jquery/jquery%s.js' % extra,
+                'autocomplete_light/jquery.init.js',
+                'admin/js/vendor/select2/select2.full%s.js' % extra,
+            ) + i18n_file + (
+                'autocomplete_light/autocomplete.init.js',
+                'autocomplete_light/forward.js',
+                'autocomplete_light/select2.js',
+                'autocomplete_light/jquery.post-setup.js',
+            ),
+            css={
+                'screen': (
+                    'admin/css/vendor/select2/select2%s.css' % extra,
+                    'admin/css/autocomplete.css',
+                    'autocomplete_light/select2.css',
+                ),
+            },
         )
 
     autocomplete_function = 'select2'
@@ -77,3 +135,49 @@ class TagSelect2(WidgetMixin,
         """
         values = super(TagSelect2, self).value_from_datadict(data, files, name)
         return six.text_type(',').join(values)
+
+    def option_value(self, value):
+        """Return the HTML option value attribute for a value."""
+        return value
+
+    def format_value(self, value):
+        """Return the list of HTML option values for a form field value."""
+        if not isinstance(value, (tuple, list)):
+            value = [value]
+
+        values = set()
+        for v in value:
+            if not v:
+                continue
+
+            v = v.split(',') if isinstance(v, six.string_types) else v
+            v = [v] if not is_iterable(v) else v
+            for t in v:
+                values.add(self.option_value(t))
+        return values
+
+    def options(self, name, value, attrs=None):
+        """Return only select options."""
+        # When the data hasn't validated, we get the raw input
+        if isinstance(value, six.text_type):
+            value = value.split(',')
+
+        for v in value:
+            if not v:
+                continue
+
+            real_values = v.split(',') if hasattr(v, 'split') else v
+            real_values = [real_values] if not is_iterable(real_values) else real_values
+            for rv in real_values:
+                yield self.option_value(rv)
+
+    def optgroups(self, name, value, attrs=None):
+        """Return a list of one optgroup and selected values."""
+        default = (None, [], 0)
+        groups = [default]
+
+        for i, v in enumerate(self.options(name, value, attrs)):
+            default[1].append(
+                self.create_option(v, v, v, True, i)
+            )
+        return groups
